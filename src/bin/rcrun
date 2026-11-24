@@ -1,0 +1,4 @@
+#!/bin/sh
+# rcrun is `ritchie run`, kept as a command name for existing scripts and
+# instructions. It runs the ritchie binary installed beside it.
+exec "$(dirname "$0")/ritchie" run "$@"

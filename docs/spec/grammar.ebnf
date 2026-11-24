@@ -1,0 +1,581 @@
+(* Ritchie grammar *)
+
+(* ------------------------------------------------------------------ *)
+(* 1. LEXICAL INPUT                                                   *)
+(* ------------------------------------------------------------------ *)
+
+(* See Ritchie Lexical Specification *)
+
+
+(* ------------------------------------------------------------------ *)
+(* 2. LEXICAL PRODUCTIONS                                             *)
+(* ------------------------------------------------------------------ *)
+
+IDENTIFIER_BODY   = ? [A-Za-z0-9_]* ? ;
+
+VARIABLE          = ? [a-z_] ? IDENTIFIER_BODY ;
+TYPE_PARAM        = ? [A-Z] ? ;
+CONSTANT          = ? [A-Z][A-Z0-9_]+ ? ;
+TYPE              = ? [A-Z][A-Za-z0-9_]+ containing at least one [a-z] ? ;
+
+ENTITY_TYPE       = "$" TYPE ;
+SERVICE_TYPE      = "@" TYPE ;
+PROJECTION_TYPE   = "%" TYPE ;
+QUERY             = "%" VARIABLE ;
+ERROR_TYPE        = TYPE "!" ;
+
+RESERVED_WORD     = "and" | "any" | "break" | "case" | "contract"
+                  | "continue" | "create" | "else" | "embed"
+                  | "exhaustive" | "false" | "for" | "handle"
+                  | "if" | "in" | "is" | "match" | "none" | "not"
+                  | "or" | "resume" | "return" | "self" | "then" | "true"
+                  | "unique" | "where" ;
+
+CONTEXTUAL_QUERY_WORD
+                  = "from" | "select" | "group" | "by" | "having"
+                  | "sort" | "limit" | "asc" | "desc" | "count"
+                  | "sum" | "avg" | "min" | "max" | "bucket" ;
+
+decimal-run       = ? [0-9] ? { [ "_" ] ? [0-9] ? } ;
+binary-run        = ? [01] ? { [ "_" ] ? [01] ? } ;
+octal-run         = ? [0-7] ? { [ "_" ] ? [0-7] ? } ;
+hex-run           = ? [0-9A-Fa-f] ? { [ "_" ] ? [0-9A-Fa-f] ? } ;
+
+INT_LITERAL       = decimal-run
+                  | "0b" binary-run
+                  | "0o" octal-run
+                  | "0x" hex-run ;
+
+exponent          = ( "e" | "E" ) [ "+" | "-" ] decimal-run ;
+FLOAT_LITERAL     = decimal-run "." decimal-run [ exponent ]
+                  | decimal-run exponent ;
+
+simple-escape     = "\\n" | "\\t" | "\\r" | "\\\\" | "\\\"" | "\\0" ;
+unicode-escape    = "\\u{" ? [0-9A-Fa-f]{1,6} ? "}" ;
+string-character  = ? any Unicode scalar except LF, double quote, and backslash ? ;
+raw-character     = ? any Unicode scalar except backtick ? ;
+
+STRING_LITERAL    = "\"" { string-character | simple-escape
+                    | unicode-escape } "\"" ;
+RAW_STRING_LITERAL
+                  = "`" { raw-character } "`" ;
+
+FSTRING           = cooked-fstring | raw-fstring ;
+cooked-fstring    = "f\"" { cooked-fstring-part } "\"" ;
+cooked-fstring-part
+                  = fstring-character | simple-escape | unicode-escape
+                  | "\\{" | "\\}" | interpolation ;
+fstring-character = ? any Unicode scalar except LF, double quote,
+                      backslash, opening brace, and closing brace ? ;
+raw-fstring       = "f`" { raw-fstring-part } "`" ;
+raw-fstring-part  = raw-fstring-character | interpolation ;
+raw-fstring-character
+                  = ? any Unicode scalar except backtick and opening brace ? ;
+interpolation     = "{" interpolation-expr "}" ;
+
+duration-d        = decimal-run "d" ;
+duration-h        = decimal-run "h" ;
+duration-m        = decimal-run "m" ;
+duration-s        = decimal-run "s" ;
+duration-ms       = decimal-run "ms" ;
+duration-us       = decimal-run "us" ;
+duration-ns       = decimal-run "ns" ;
+
+DURATION_LITERAL  = duration-d  [ duration-h ] [ duration-m ] [ duration-s ]
+                                  [ duration-ms ] [ duration-us ] [ duration-ns ]
+                  | duration-h  [ duration-m ] [ duration-s ] [ duration-ms ]
+                                  [ duration-us ] [ duration-ns ]
+                  | duration-m  [ duration-s ] [ duration-ms ] [ duration-us ]
+                                  [ duration-ns ]
+                  | duration-s  [ duration-ms ] [ duration-us ] [ duration-ns ]
+                  | duration-ms [ duration-us ] [ duration-ns ]
+                  | duration-us [ duration-ns ]
+                  | duration-ns ;
+
+date-year         = ? [0-9]{4} ?
+                  | "+" ? [0-9]{6} ?
+                  | "-" ? [0-9]{6} ? ;
+date-text         = date-year "-" ? [0-9]{2} ? "-" ? [0-9]{2} ? ;
+datetime-date-text
+                  = ? [0-9]{4} ? "-" ? [0-9]{2} ? "-" ? [0-9]{2} ? ;
+time-text         = ? [0-9]{2} ? ":" ? [0-9]{2} ? ":" ? [0-9]{2} ?
+                    [ "." ? [0-9]+ ? ] ;
+zone-text         = "Z" | ? [+-][0-9]{2}:[0-9]{2} ? ;
+
+DATE_LITERAL      = "d" date-text ;
+TIME_LITERAL      = "t" time-text ;
+DATETIME_LITERAL  = datetime-date-text "T" time-text zone-text ;
+
+ACCEPTED_SYMBOL   = "+" | "-" | "*" | "/" | "%"
+                  | "==" | "!=" | "<" | ">" | "<=" | ">=" | "??"
+                  | "=" | "+=" | "-=" | "*=" | "/=" | "??="
+                  | "?" | ":" | "(" | ")" | "{" | "}" | "[" | "]"
+                  | "," | "." | "::" | "=>" | "->" | ":=" | "#" | "|" ;
+
+REJECTED_SYMBOL   = "&" | "&&" | "||" | "!" | "++" | "--" ;
+RESERVED_SYMBOL   = "~" | "~>" | "<~" | "<-" | "|>" | ".." | "..." ;
+
+
+(* ------------------------------------------------------------------ *)
+(* 3. PROGRAM AND DECLARATIONS                                        *)
+(* ------------------------------------------------------------------ *)
+
+program            = { declaration } ;
+
+declaration        = function-declaration
+                   | method-declaration
+                   | contract-declaration
+                   | conformance-declaration
+                   | struct-declaration
+                   | enum-declaration
+                   | entity-declaration
+                   | service-declaration
+                   | error-declaration
+                   | projection-declaration
+                   | query-declaration
+                   | type-alias-declaration
+                   | sum-declaration
+                   | scalar-declaration
+                   | constant-declaration ;
+
+function-declaration
+                   = VARIABLE "(" [ parameter-list ] ")"
+                     [ "->" return-signature ] [ where-clause ] block ;
+
+(* The error slot of a free function's return-signature is kernel notation:
+   a kernel program writes the function's raise set there, and the compiler
+   checks it against the inferred set. Source programs omit it. *)
+
+method-declaration = value-method-receiver "." VARIABLE
+                     "(" [ parameter-list ] ")"
+                     [ "->" return-type ] [ where-clause ] block
+                   | boundary-method-receiver "." VARIABLE
+                     "(" [ parameter-list ] ")"
+                     [ "->" return-signature ] [ where-clause ] block ;
+
+value-method-receiver
+                   = TYPE [ receiver-parameters ] | TYPE_PARAM ;
+boundary-method-receiver
+                   = ENTITY_TYPE | SERVICE_TYPE ;
+receiver-parameters
+                   = "<" TYPE_PARAM { "," TYPE_PARAM } ">" ;
+
+contract-declaration
+                   = "contract" TYPE "{" { contract-method } "}" ;
+contract-method    = TYPE_PARAM "." VARIABLE
+                     "(" [ parameter-list ] ")"
+                     [ "->" return-signature ] [ block ] ;
+
+conformance-declaration
+                   = conformance-provider "is" contract-reference ;
+conformance-provider
+                   = TYPE [ receiver-parameters ] | ENTITY_TYPE | SERVICE_TYPE ;
+contract-reference = [ module-name "::" ] TYPE ;
+
+where-clause       = "where" contract-bound { "and" contract-bound } ;
+contract-bound     = TYPE_PARAM "is" contract-reference
+                     { "," contract-reference } ;
+
+struct-declaration = TYPE "{" [ struct-field-list ] "}" ;
+entity-declaration = ENTITY_TYPE "{" [ entity-field-list ] "}" ;
+error-declaration  = ERROR_TYPE [ "{" [ error-field-list ] "}" ] ;
+service-declaration
+                   = SERVICE_TYPE "{" "}" ;
+
+enum-declaration   = TYPE "{" enum-member-list "}" ;
+enum-member-list   = bare-enum-member { "," bare-enum-member } [ "," ]
+                   | backed-enum-member { "," backed-enum-member } [ "," ] ;
+bare-enum-member   = CONSTANT ;
+backed-enum-member = CONSTANT ":" enum-backing-literal ;
+enum-backing-literal
+                   = INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL
+                   | RAW_STRING_LITERAL | DURATION_LITERAL | DATE_LITERAL
+                   | TIME_LITERAL | DATETIME_LITERAL | "true" | "false" ;
+
+type-alias-declaration
+                   = alias-name "=" alias-target ;
+alias-name         = TYPE [ "#" ] | ENTITY_TYPE [ "#" ] | SERVICE_TYPE
+                   | PROJECTION_TYPE | ERROR_TYPE ;
+alias-target       = type | qualified-service-type
+                   | qualified-projection-type ;
+
+sum-declaration    = TYPE "=" type "|" type { "|" type } ;
+
+scalar-declaration = TYPE ":=" type ;
+constant-declaration
+                   = type CONSTANT "=" initializer ;
+
+struct-field-list  = struct-field { "," struct-field } [ "," ] ;
+struct-field       = [ "embed" ] type VARIABLE [ "=" initializer ] ;
+entity-field-list  = entity-field { "," entity-field } [ "," ] ;
+entity-field       = [ "unique" ] type VARIABLE [ "=" initializer ] ;
+error-field-list   = error-field { "," error-field } [ "," ] ;
+error-field        = type VARIABLE [ "=" initializer ] ;
+
+parameter-list     = parameter { "," parameter } ;
+parameter          = type VARIABLE [ "=" initializer ] ;
+
+
+
+(* ------------------------------------------------------------------ *)
+(* 4. NAMES AND TYPES                                                 *)
+(* ------------------------------------------------------------------ *)
+
+module-name        = VARIABLE ;
+
+qualified-plain-type
+                   = [ module-name "::" ] TYPE [ type-arguments ] ;
+qualified-entity-type
+                   = [ module-name "::" ] ENTITY_TYPE ;
+qualified-service-type
+                   = [ module-name "::" ] SERVICE_TYPE ;
+qualified-error-type
+                   = [ module-name "::" ] ERROR_TYPE ;
+qualified-projection-type
+                   = [ module-name "::" ] PROJECTION_TYPE ;
+
+type               = named-value-type [ "?" ] { array-suffix }
+                   | function-type
+                   | dictionary-type { array-suffix } ;
+
+named-value-type   = qualified-plain-type
+                   | qualified-entity-type [ "#" ]
+                   | qualified-error-type
+                   | TYPE_PARAM ;
+
+type-arguments     = "<" type { "," type } ">" ;
+array-suffix       = "[" "]" | "[" ( INT_LITERAL | CONSTANT | qualified-constant ) "]" ;
+dictionary-type    = "[" type ":" type "]" ;
+
+function-type      = "(" [ type-list ] ")" [ "->" return-type ] ;
+type-list          = type { "," type } ;
+multi-type-list    = type "," type { "," type } ;
+return-type        = type | "(" multi-type-list ")" ;
+
+return-signature   = success-form { "|" qualified-error-type } ;
+success-form       = type | "(" multi-type-list ")" | "none" ;
+
+
+(* ------------------------------------------------------------------ *)
+(* 5. STATEMENTS                                                      *)
+(* ------------------------------------------------------------------ *)
+
+block              = "{" { statement } "}" ;
+
+statement          = unhandled-statement [ handle-clause ] ;
+
+unhandled-statement = return-statement
+                   | resume-statement
+                   | if-statement
+                   | for-statement
+                   | labelled-for-statement
+                   | break-statement
+                   | continue-statement
+                   | match-statement
+                   | variable-declaration
+                   | local-constant-declaration
+                   | block
+                   | multi-assignment-statement
+                   | assignment-statement
+                   | call-expression
+                   | get-or-create-expression ;
+
+return-statement   = "return" [ value-list ] ;
+resume-statement   = "resume" [ value-list ] ;
+
+if-statement       = "if" expression block
+                     { "else" "if" expression block }
+                     [ "else" block ] ;
+
+for-statement      = "for" block
+                   | "for" VARIABLE { "," VARIABLE } "in" expression
+                     block
+                   | "for" expression block ;
+
+labelled-for-statement
+                   = VARIABLE ":" for-statement ;
+break-statement    = "break" [ VARIABLE ] ;
+continue-statement = "continue" [ VARIABLE ] ;
+
+match-statement    = "match" [ expression ] "{" match-arm-list "}" ;
+match-arm-list     = match-arm { "," match-arm } [ "," ] ;
+match-arm          = "case" pattern { "," pattern } "=>" match-arm-body
+                   | "case" type VARIABLE "=>" match-arm-body
+                   | "any" "=>" match-arm-body
+                   | "any!" [ VARIABLE ] "=>" match-arm-body ;
+
+(* A match without a subject selects the first arm whose Bool candidate
+   holds. A match whose subject is a call matches the call's outcome: a typed
+   arm selects the success value or a failure of that error type, "case none"
+   selects a success without a value, "any" the remaining successes, and
+   "any!" the remaining failures. "any" and "any!" each occur at most once
+   and follow every "case" arm. *)
+pattern            = expression ;
+match-arm-body     = statement ;
+
+variable-declaration = single-variable-declaration | multi-variable-declaration ;
+single-variable-declaration = type VARIABLE [ "=" initializer ] ;
+multi-variable-declaration = ( same-type-targets | mixed-type-targets )
+                     "=" value-list ;
+same-type-targets  = type VARIABLE "," VARIABLE { "," VARIABLE } ;
+mixed-type-targets = type VARIABLE "," type VARIABLE
+                     { "," type VARIABLE } ;
+local-constant-declaration
+                   = type CONSTANT "=" initializer ;
+
+value-list         = expression { "," expression } ;
+
+assignment-target  = ( VARIABLE | "self" ) { target-selector } ;
+target-selector    = "." VARIABLE | "[" expression "]" ;
+
+assignment-statement
+                   = simple-assignment
+                   | assignment-target compound-assignment-op expression ;
+simple-assignment  = assignment-target "=" ( simple-assignment | expression ) ;
+compound-assignment-op
+                   = "+=" | "-=" | "*=" | "/=" | "%=" | "??=" ;
+
+multi-assignment-statement
+                   = assignment-target "," assignment-target
+                     { "," assignment-target } "=" value-list ;
+
+(* A suffix protects the complete statement, including an entire loop. *)
+
+
+(* ------------------------------------------------------------------ *)
+(* 6. VALUE EXPRESSIONS                                               *)
+(* ------------------------------------------------------------------ *)
+
+expression         = ternary-expression ;
+interpolation-expr = ternary-expression ;
+
+ternary-expression = or-expression
+                     [ "?" or-expression ":" or-expression ] ;
+or-expression      = and-expression { "or" and-expression } ;
+and-expression     = not-expression { "and" not-expression } ;
+not-expression     = "not" not-expression | equality-expression ;
+equality-expression
+                   = relational-expression
+                     [ "==" relational-expression
+                       [ "==" relational-expression ]
+                     | "!=" relational-expression
+                       [ "!=" relational-expression ] ] ;
+relational-expression
+                   = coalesce-expression
+                     [ ascending-comparison | descending-comparison ] ;
+ascending-comparison
+                   = ( "<" | "<=" ) coalesce-expression
+                     [ ( "<" | "<=" ) coalesce-expression ] ;
+descending-comparison
+                   = ( ">" | ">=" ) coalesce-expression
+                     [ ( ">" | ">=" ) coalesce-expression ] ;
+coalesce-expression
+                   = additive-expression [ "??" coalesce-expression ] ;
+additive-expression
+                   = multiplicative-expression
+                     { ( "+" | "-" ) multiplicative-expression } ;
+multiplicative-expression
+                   = unary-expression { ( "*" | "/" | "%" ) unary-expression } ;
+unary-expression   = "-" unary-expression | postfix-expression ;
+
+(* A ternary may not be the direct condition or arm of another ternary, and a
+   ternary and ?? may not be direct operands of one another. Redundant
+   parentheses do not change either restriction. Containment behind another
+   expression node is permitted. *)
+
+postfix-expression = primary-expression { postfix-suffix } ;
+postfix-suffix      = member-suffix | call-suffix | index-suffix
+                   | slice-suffix ;
+member-suffix       = "." VARIABLE ;
+call-suffix         = "(" [ argument-list ] ")" ;
+index-suffix        = "[" expression "]" ;
+slice-suffix        = "[" [ expression ] ":" [ expression ] "]" ;
+
+call-expression    = primary-expression { member-suffix | index-suffix
+                     | slice-suffix } call-suffix { postfix-suffix }
+                   | direct-call-expression { postfix-suffix } ;
+
+
+(* ------------------------------------------------------------------ *)
+(* 7. PRIMARY EXPRESSIONS AND INITIALIZERS                             *)
+(* ------------------------------------------------------------------ *)
+
+primary-expression = INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL
+                   | RAW_STRING_LITERAL | FSTRING | DURATION_LITERAL
+                   | DATE_LITERAL | TIME_LITERAL | DATETIME_LITERAL
+                   | "true" | "false" | "none" | "self"
+                   | VARIABLE | CONSTANT | qualified-constant
+                   | qualified-function-reference
+                   | closure-expression
+                   | type-member-reference
+                   | direct-call-expression
+                   | struct-literal | creation-expression | error-literal
+                   | entity-lookup | get-or-create-expression
+                   | parenthesized-expression
+                   | array-literal | dictionary-literal ;
+
+qualified-constant = module-name "::" CONSTANT ;
+qualified-function-reference
+                   = module-name "::" VARIABLE ;
+
+type-member-reference
+                   = type-member-owner "." ( CONSTANT | VARIABLE ) ;
+type-member-owner  = [ module-name "::" ]
+                     ( TYPE [ type-arguments ] { array-suffix } | ENTITY_TYPE )
+                   | TYPE_PARAM ;
+
+direct-call-expression
+                   = service-call | query-call ;
+service-call       = qualified-service-type "." VARIABLE call-suffix ;
+query-call         = QUERY call-suffix
+                   | qualified-projection-type "." VARIABLE call-suffix ;
+
+dot-member         = "." CONSTANT | "." VARIABLE [ call-suffix ] ;
+initializer        = dot-member | expression ;
+
+closure-expression = VARIABLE "=>" closure-body
+                   | "(" [ closure-parameter-list ] ")" "=>" closure-body ;
+closure-parameter-list
+                   = closure-parameter { "," closure-parameter } ;
+closure-parameter  = type VARIABLE | VARIABLE ;
+closure-body       = block | expression ;
+
+struct-literal     = TYPE [ type-arguments ] "{" [ initializer-list ] "}" ;
+creation-expression
+                   = "create" ENTITY_TYPE "{" [ initializer-list ] "}" ;
+error-literal      = ERROR_TYPE [ "{" [ initializer-list ] "}" ] ;
+
+initializer-list   = named-initializer { "," named-initializer } [ "," ]
+                   | expression { "," expression } [ "," ] ;
+named-initializer  = VARIABLE ":" expression ;
+
+entity-lookup      = ENTITY_TYPE "[" lookup-key "]" ;
+lookup-key         = expression | VARIABLE ":" expression ;
+
+get-or-create-expression
+                   = ENTITY_TYPE "[" VARIABLE ":" expression "]"
+                     "else" creation-expression [ "then" block ] ;
+
+parenthesized-expression
+                   = "(" expression ")" ;
+
+array-literal      = "[" [ expression { "," expression } [ "," ] ] "]" ;
+dictionary-literal = "[" ":" "]"
+                   | "[" dictionary-entry { "," dictionary-entry } [ "," ] "]" ;
+dictionary-entry   = expression ":" expression ;
+
+argument-list      = expression { "," expression }
+                   | named-argument { "," named-argument } ;
+named-argument     = VARIABLE ":" expression ;
+
+
+(* ------------------------------------------------------------------ *)
+(* 8. HANDLE CLAUSES                                                  *)
+(* ------------------------------------------------------------------ *)
+
+handle-clause      = "handle" handle-arm
+                   | "handle" "{" handle-arm-list "}"
+                   | "handle" "exhaustive" typed-handle-arm
+                   | "handle" "exhaustive" "{"
+                     typed-handle-arm-list "}" ;
+handle-arm-list    = handle-arm { "," handle-arm } [ "," ] ;
+typed-handle-arm-list
+                   = typed-handle-arm { "," typed-handle-arm } [ "," ] ;
+handle-arm         = typed-handle-arm
+                   | any-handle-pattern "=>" handle-body ;
+typed-handle-arm   = typed-handle-pattern "=>" handle-body ;
+handle-body        = value-list | block | resume-statement
+                   | return-statement | break-statement | continue-statement ;
+typed-handle-pattern
+                   = qualified-error-type [ VARIABLE ] ;
+any-handle-pattern = "any" [ VARIABLE ] ;
+
+(* Arm separators follow completed bodies. A comma before another pattern
+   ending in => separates arms; commas within a result list belong to it.
+   A compact arm begins without a newline or semicolon after handle.
+   Resume context and final-any rules are checked. A handler arm selects by
+   error type only. *)
+
+
+(* ------------------------------------------------------------------ *)
+(* 9. PROJECTIONS AND QUERIES                                         *)
+(* ------------------------------------------------------------------ *)
+
+projection-declaration
+                   = PROJECTION_TYPE "{" projection-body "}" ;
+projection-body    = sourced-projection-body | projection-column-list ;
+sourced-projection-body
+                   = from-clause select-clause ;
+projection-column-list
+                   = projection-column { "," projection-column } [ "," ] ;
+projection-column  = type VARIABLE ;
+
+query-declaration  = QUERY "(" [ parameter-list ] ")" "->"
+                     qualified-projection-type query-clause-block
+                   | PROJECTION_TYPE "." VARIABLE
+                     "(" [ parameter-list ] ")" query-clause-block ;
+
+query-clause-block = "{" from-clause [ query-where-clause ]
+                     [ group-clause ] [ select-clause ] [ having-clause ]
+                     [ sort-clause ] [ limit-clause ] "}" ;
+
+from-clause        = "from" source-variable { "," source-variable } ;
+source-variable =  query-source VARIABLE ;
+query-source       = ENTITY_TYPE | qualified-projection-type ;
+
+query-where-clause = "where" query-predicate ;
+group-clause       = "group" "by" group-key { "," group-key } ;
+group-key          = query-path | bucket-expression ;
+
+select-clause      = "select" "{" select-list "}" ;
+select-list        = select-expression { "," select-expression } [ "," ]
+                   | named-select { "," named-select } [ "," ] ;
+named-select       = VARIABLE ":" select-expression ;
+
+having-clause      = "having" query-predicate ;
+sort-clause        = "sort" sort-key { "," sort-key } ;
+sort-key           = query-path [ "asc" | "desc" ] ;
+limit-clause       = "limit" ( INT_LITERAL | VARIABLE
+                     | query-constant ) ;
+
+select-expression  = select-additive ;
+select-additive    = select-multiplicative
+                     { ( "+" | "-" ) select-multiplicative } ;
+select-multiplicative
+                   = select-atom { ( "*" | "/" | "%" ) select-atom } ;
+select-atom        = query-path | query-constant | aggregate-expression
+                   | bucket-expression | INT_LITERAL | FLOAT_LITERAL
+                   | "(" select-expression ")" ;
+
+aggregate-expression
+                   = ( "count" | "sum" | "avg" | "min" | "max" )
+                     "(" query-path ")" ;
+bucket-expression  = "bucket" "(" query-path ","
+                     ( DURATION_LITERAL | VARIABLE | query-constant ) ")" ;
+
+query-predicate    = query-or ;
+query-or           = query-and { "or" query-and } ;
+query-and          = query-not { "and" query-not } ;
+query-not          = "not" query-not | query-comparison ;
+query-comparison   = query-value comparison-operator query-value
+                     [ comparison-operator query-value ]
+                   | query-value "in" query-value
+                   | "(" query-predicate ")" ;
+comparison-operator
+                   = "==" | "!=" | "<" | ">" | "<=" | ">=" ;
+
+query-value        = query-additive ;
+query-additive     = query-multiplicative
+                     { ( "+" | "-" ) query-multiplicative } ;
+query-multiplicative
+                   = query-atom { ( "*" | "/" | "%" ) query-atom } ;
+query-atom         = query-path | query-constant | query-enum-member
+                   | INT_LITERAL | FLOAT_LITERAL | STRING_LITERAL
+                   | RAW_STRING_LITERAL
+                   | DATE_LITERAL | TIME_LITERAL | DATETIME_LITERAL
+                   | DURATION_LITERAL | "true" | "false" | "none"
+                   | "(" query-value ")" ;
+
+query-constant     = CONSTANT | module-name "::" CONSTANT ;
+query-enum-member  = [ module-name "::" ] TYPE "." CONSTANT ;
+query-path         = VARIABLE { "." VARIABLE } ;

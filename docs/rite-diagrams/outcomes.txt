@@ -1,0 +1,59 @@
+  RPC
+
+   Originator             Runtime            Destination
+       |                     |                     |
+       |      request        |                     |          --+
+       +-------------------->|                     |            |
+       |                     |      request        |            |  ERR_REQUEST
+       |                     +-------------------->|          --+
+       |                     |                     |
+       |                     |                   +-+-+        --+
+       |                     |                   |   | handler  |
+       |                     |                   +-+-+          |
+       |                     |      response       |            |  ERR_RESPONSE
+       |                     |<--------------------+            |
+       |      response       |                     |          --+
+       |<--------------------+                     |               Completed
+       |                     |                     |
+
+
+  Messaging
+
+   Originator             Runtime            Destination
+       |                     |                     |          --+
+       |      message        |                     |            |  ERR_REQUEST
+       +-------------------->|                     |          --+
+       |                     |                     |
+       |                   +-+-+                   |          --+
+       |                   |   | custody           |            |
+       |                   +-+-+                   |            |  ERR_RESPONSE
+       |  acknowledgement    |                     |          --+
+       |<--------------------+                     |               Completed
+       |                     |                     |
+       |                     |      delivery       |          --+
+       |                     +-------------------->|            |
+       |                     |                   +-+-+          |
+       |                     |                   |   | handler  |  no in-band
+       |                     |                   +-+-+          |  outcome
+       |                     |     settlement      |            |
+       |                     |<--------------------+          --+
+       |                     |                     |
+
+
+  Activation
+
+     Stream               Runtime              Consumer
+       |                     |                     |
+       |       Event         |                     |
+       +-------------------->|                     |
+       |                     |                     |          --+
+       |                     |      attempt        |            |  ERR_REQUEST
+       |                     +-------------------->|          --+
+       |                     |                     |
+       |                     |                   +-+-+        --+
+       |                     |                   |   | handler  |
+       |                     |                   +-+-+          |  ERR_RESPONSE
+       |                     |      result         |            |
+       |                     |<--------------------+          --+
+       |                     |                     |               Completed
+       |                     |                     |

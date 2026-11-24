@@ -1,0 +1,214 @@
+%YAML 1.2
+---
+# Ritchie syntax highlighting. Tracks docs/spec/grammar.ebnf and docs/spec/lexical.md.
+#
+# Token classes: the eight archetypes -- VARIABLE, TYPE, TYPE_PARAM, CONSTANT,
+# $entity, @service, %projection / %query, and the error! suffix -- plus the
+# reserved keywords and the full literal set (integer in four radixes, float,
+# duration, date, time, datetime, String, byte-array, and formatted String).
+name: Ritchie
+file_extensions:
+  - ri
+scope: source.ri
+
+contexts:
+  main:
+    # --- Comments ---
+    - match: '//.*$'
+      scope: comment.line.double-slash.ri
+    - match: '/\*'
+      scope: punctuation.definition.comment.begin
+      push: block_comment
+
+    # --- Strings (f-strings first so the f prefix is consumed) ---
+    - match: 'f"'
+      scope: punctuation.definition.string.begin
+      push: fstring_double
+    - match: 'f`'
+      scope: punctuation.definition.string.begin
+      push: fstring_backtick
+    - match: 'b"'
+      scope: punctuation.definition.string.begin
+      push: byte_array_double
+    - match: 'b`'
+      scope: punctuation.definition.string.begin
+      push: byte_array_backtick
+    - match: '"'
+      scope: punctuation.definition.string.begin
+      push: string_double
+    - match: '`'
+      scope: punctuation.definition.string.begin
+      push: string_backtick
+
+    # --- Temporal and numeric literals (longest form first) ---
+    # DateTime: four-digit date, time, and offset
+    - match: '(?<!\w)\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})'
+      scope: constant.numeric.datetime.ri
+    # Date: d, then a four-digit or signed six-digit year and MM-DD
+    - match: '(?<!\w)d(?:\d{4}|[+-]\d{6})-\d{2}-\d{2}\b'
+      scope: constant.numeric.date.ri
+    # Time: tHH:MM:SS with optional fractional seconds
+    - match: '(?<!\w)t\d{2}:\d{2}:\d{2}(\.\d+)?'
+      scope: constant.numeric.time.ri
+    # Duration: descending unit segments (10ns, 500ms, 1h30m, 2d12h)
+    - match: '\b\d[\d_]*(ns|us|ms|s|m|h|d)(\d[\d_]*(ns|us|ms|s|m|h|d))*\b'
+      scope: constant.numeric.duration.ri
+    # Float: fractional part and/or exponent
+    - match: '\b\d[\d_]*\.\d[\d_]*([eE][+-]?\d[\d_]*)?'
+      scope: constant.numeric.float.ri
+    - match: '\b\d[\d_]*[eE][+-]?\d[\d_]*\b'
+      scope: constant.numeric.float.ri
+    # Integer: hex, octal, binary, decimal
+    - match: '\b(0x[0-9a-fA-F][0-9a-fA-F_]*|0o[0-7][0-7_]*|0b[01][01_]*|\d[\d_]*)\b'
+      scope: constant.numeric.integer.ri
+
+    # --- Archetype sigils ---
+    # Entity type: $Account
+    - match: '\$[A-Z][a-zA-Z0-9]*'
+      scope: entity.name.class.ri
+    # Service type: @PaymentGateway
+    - match: '@[A-Z][a-zA-Z0-9]*'
+      scope: support.class.ri
+    # Projection type: %Order (% before a TYPE -- not the modulo operator)
+    - match: '(?<![\w)\]])%[A-Z][a-zA-Z0-9]*'
+      scope: entity.name.type.projection.ri
+    # Query: %byDay (% before a VARIABLE), invoked like a function
+    - match: '(?<![\w)\]])%[a-z][a-zA-Z0-9_]*'
+      scope: entity.name.function.query.ri
+    # Error type: NotFound! (TYPE then "!"; "!" is not part of "!=")
+    - match: '\b[A-Z][a-zA-Z0-9]*!(?!=)'
+      scope: entity.name.exception.ri
+
+    # --- Keywords ---
+    - match: '\b(and|any|break|case|continue|contract|create|else|for|handle|if|in|is|match|not|or|return|then|unique|where)\b'
+      scope: keyword.control.ri
+    - match: '\b(self)\b'
+      scope: keyword.other.ri
+    - match: '\b(true|false|none)\b'
+      scope: constant.language.ri
+
+    # --- Names ---
+    # Named init / named arg / dict key (lowercase name before a single ":")
+    - match: '\b([a-z][a-zA-Z0-9_]*)(?=\s*:(?!:))'
+      captures:
+        1: variable.other.member.ri
+    # Function definition or call (lowercase name before "(")
+    - match: '(?<![.\w])([a-z][a-zA-Z0-9_]*)\s*(?=\()'
+      captures:
+        1: entity.name.function.ri
+    # Method call (".name(")
+    - match: '\.([a-z][a-zA-Z0-9_]*)\s*(?=\()'
+      captures:
+        1: entity.name.function.ri
+    # Field access (".name" with no following "(")
+    - match: '\.([a-z][a-zA-Z0-9_]*)\b'
+      captures:
+        1: variable.other.member.ri
+
+    # --- Identifiers classified by letter case ---
+    # Constant: uppercase-led, 2+ chars, no lowercase (SCREAMING_SNAKE, enum members)
+    - match: '\b[A-Z][A-Z0-9_]*[A-Z0-9]\b'
+      scope: constant.other.ri
+    # Type: uppercase-led, 2+ chars, with a lowercase letter (PascalCase)
+    - match: '\b[A-Z][a-zA-Z0-9]+\b'
+      scope: entity.name.type.ri
+    # Type parameter: a single uppercase letter
+    - match: '\b[A-Z]\b'
+      scope: entity.name.type.ri
+
+    # --- Operators ---
+    - match: '=>|->'
+      scope: keyword.operator.ri
+    - match: '==|!=|<=|>='
+      scope: keyword.operator.ri
+    - match: '\+=|-=|\*=|/='
+      scope: keyword.operator.ri
+    - match: '[-+*/%<>=?]'
+      scope: keyword.operator.ri
+    - match: '\|'
+      scope: keyword.operator.ri
+
+    # --- Brackets and delimiters ---
+    - match: '[\[\]\(\)\{\}]'
+      scope: punctuation.section.ri
+    - match: '[,.:]'
+      scope: punctuation.delimiter.ri
+
+  block_comment:
+    - meta_scope: comment.block.ri
+    # Block comments nest.
+    - match: '/\*'
+      push: block_comment
+    - match: '\*/'
+      scope: punctuation.definition.comment.end
+      pop: true
+
+  string_double:
+    - meta_scope: string.quoted.double.ri
+    - match: '\\u\{[0-9a-fA-F]+\}'
+      scope: constant.character.escape.ri
+    - match: '\\[ntr0"\\]'
+      scope: constant.character.escape.ri
+    - match: '"'
+      scope: punctuation.definition.string.end
+      pop: true
+
+  string_backtick:
+    - meta_scope: string.quoted.other.ri
+    - match: '`'
+      scope: punctuation.definition.string.end
+      pop: true
+
+  byte_array_double:
+    - meta_scope: string.quoted.double.ri
+    - match: '\\u\{[0-9a-fA-F]+\}'
+      scope: constant.character.escape.ri
+    - match: '\\x[0-9a-fA-F]{2}'
+      scope: constant.character.escape.ri
+    - match: '\\[ntr0"\\]'
+      scope: constant.character.escape.ri
+    - match: '"'
+      scope: punctuation.definition.string.end
+      pop: true
+
+  byte_array_backtick:
+    - meta_scope: string.quoted.other.ri
+    - match: '`'
+      scope: punctuation.definition.string.end
+      pop: true
+
+  fstring_double:
+    - meta_scope: string.quoted.double.ri
+    - match: '\\u\{[0-9a-fA-F]+\}'
+      scope: constant.character.escape.ri
+    - match: '\\[ntr0"\\]'
+      scope: constant.character.escape.ri
+    - match: '\{\{|\}\}'
+      scope: constant.character.escape.ri
+    - match: '\{'
+      scope: punctuation.section.interpolation.begin.ri
+      push: interpolation
+    - match: '"'
+      scope: punctuation.definition.string.end
+      pop: true
+
+  fstring_backtick:
+    - meta_scope: string.quoted.other.ri
+    - match: '\{\{|\}\}'
+      scope: constant.character.escape.ri
+    - match: '\{'
+      scope: punctuation.section.interpolation.begin.ri
+      push: interpolation
+    - match: '`'
+      scope: punctuation.definition.string.end
+      pop: true
+
+  interpolation:
+    - meta_scope: meta.interpolation.ri
+    - match: '\{'
+      scope: punctuation.section.interpolation.begin.ri
+      push: interpolation
+    - match: '\}'
+      scope: punctuation.section.interpolation.end.ri
+      pop: true
+    - include: main
