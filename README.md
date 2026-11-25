@@ -26,7 +26,10 @@ types for decimal numbers, civil dates and times, timestamps, and
 durations, among other conveniences. It has value semantics for local
 types. It has sequential, single-threaded local execution while
 providing concurrent invocation handling and automatic concurrency for
-remote interactions to reduce latency.
+remote interactions to reduce latency. A remote read does not hold up
+the statements after it, and the program waits for its result where
+the value is used. Remote mutations run in written order, because they
+change state that other units observe.
 
 This repository holds the [compiler](src/), the [language
 reference](docs/ritchie-reference/), the [RITE document](docs/rite.md),

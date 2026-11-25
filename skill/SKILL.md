@@ -2,16 +2,26 @@
 name: ritchie
 description: Write, explain, check, debug, and teach Ritchie programs. Use for Ritchie coding questions, generated examples, exercises, diagnostics, and interactive lessons. Do not use for compiler implementation or language design.
 metadata:
-  version: "26"
+  version: "27"
 ---
 
 # Ritchie
 
-Every claim about Ritchie comes from the language capsule below, not
-from any other language. For a facility the capsule lacks, say that
-the skill does not document it and offer a documented alternative.
+## About
+
+Ritchie is an imperative language. Its variables have value semantics:
+assigning, passing or returning a value copies it, and only an
+assignment or a method of the value can change it. Operations on
+strings and arrays are free functions that return a result and leave
+their arguments unchanged. Local execution is sequential and
+single-threaded. A service call does not hold up the statements after
+it, and the program waits for its result where it first uses the value.
 
 ## Writing programs
+
+Every claim about Ritchie comes from the language capsule below. For a
+facility the capsule lacks, say that the skill does not document it
+and offer a documented alternative.
 
 Prefer the smallest program that answers the request, and explain the
 constructs a reader may not know. Check every program you present with the
@@ -544,7 +554,8 @@ budget and its errors, not by timing calls.
 
 ### Futures
 
-A call of a service method starts where it is written, and the program
+A service call does not hold up the statements after it. It is sent when
+the program reaches it, or earlier in the loops below, and the program
 waits for its result at the first use of the value.
 
 - Storing a result in a variable or an array element, or appending it to an
@@ -552,16 +563,25 @@ waits for its result at the first use of the value.
   target for a `T` result waits. `count(xs)` of an array of results does
   not wait either. Every other use waits, such as a dictionary entry, a
   field, arithmetic, `if`, an argument of another call, and `print`.
-- A use waits for its call and every call started before it, and so does a
-  call of a function value. So of two failed calls the program sees the
-  earlier one, and a loop whose body starts a call and also uses its result
-  or calls a function value runs its calls in sequence. Collect the results
-  in an array in one loop and use them in a second loop.
-- A local routine whose body calls services, writes no output, has no
-  `for` loop without `in`, and does not call itself, also through other
-  routines, starts at its call in the same way, so a routine for one item,
-  which may use its results and handle their failures, can be called for
-  every item and the calls run together.
+- A use waits for its call and every call sent before it, so of two failed
+  calls the program sees the earlier one.
+- `print`, `r::Clock.sleep`, and a call of a function value wait for every
+  call sent so far. Inside a service method they do not order the calls of
+  its caller.
+- A `for ... in` loop whose body holds none of those three sends the calls
+  of all its iterations together, and each iteration uses its results in
+  turn. This applies to a call whose arguments are the loop variable,
+  literals, and variables that the loop does not assign. A call that takes
+  a result as an argument is sent when its iteration reaches it, so such
+  calls run in sequence across iterations.
+- Several dependent calls for one item therefore go in a local routine. A
+  routine that calls services and holds no `print`, sleep, call of a
+  function value, closure, assignment to a parameter, `for` loop without
+  `in`, or call of itself, also through other routines, starts like a
+  service call, so calling it for every item runs the items together.
+- A loop that prints each result runs its calls in sequence. To parallelise
+  them, collect the results in an array in one loop and print them in a
+  second.
 - A call's failure is raised at the call's statement, and only a handler
   there catches it; an arm on a later use that nothing else selects is
   rejected with `handle.dead-arm`.
@@ -570,9 +590,12 @@ waits for its result at the first use of the value.
   `handle Low! => { return 0 }`, does not wait, so a stored marker can
   stand for a failure. Any other arm, such as an f-string, waits.
 - Leaving a routine waits for every call written before the exit and
-  cancels every call written after it.
-- A call with a side effect also starts early, so to start a call only after
-  an earlier call has succeeded, use the earlier result first, as in an `if`.
+  cancels every later one, and `continue` and `break` cancel the calls that
+  the loop sent ahead for the statements they skip. A cancelled call may
+  have started, so a service method can run for an item that the loop then
+  skips.
+- A call starts only after an earlier call has succeeded when it takes that
+  call's result as an argument or stands inside an `if` on that result.
 
 ```ritchie
 Low!
@@ -592,12 +615,10 @@ reading(Int id) -> Int | Low! {
 }
 
 main() {
-    Int[] sums = []
-    for id in [1, 2, 3] {
-        sums = append(sums, reading(id))
-    }
     Int total = 0
-    for s in sums { total += s }
+    for id in [1, 2, 3] {
+        total += reading(id)
+    }
     print(total)
     Int bad = reading(9) handle Low! => -1
     print(bad)
