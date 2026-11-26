@@ -102,6 +102,12 @@ func build(set *sourceSet) (string, string, error) {
 			return dir, exe, nil
 		}
 	}
+	if packed(set, dir, exe) {
+		if cached != "" {
+			remember(exe, cached)
+		}
+		return dir, exe, nil
+	}
 	cmd := exec.Command("go", "build", "-trimpath", "-o", exe, ".")
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=", "GOPROXY=off", "CGO_ENABLED=0")
